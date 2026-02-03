@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import os
 
 # --- APP CONFIGURATION ---
 st.set_page_config(
@@ -11,14 +12,20 @@ st.set_page_config(
 )
 
 # --- CONSTANTS ---
-# REPLACE THIS URL WITH YOUR ACTUAL RAW GITHUB URL
-GITHUB_DATA_URL = "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO_NAME/main/data/df_clean.csv"
+# Use the relative path. This works if 'data' folder is in the same directory as this script.
+DATA_PATH = "data/df_clean.csv"
 
 # --- DATA LOADING ---
 @st.cache_data
-def load_data(url):
+def load_data(path):
     try:
-        df = pd.read_csv(url)
+        # Check if file exists locally (good for debugging)
+        if not os.path.exists(path):
+            st.error(f"File not found at path: {path}")
+            st.info("Please ensure 'df_clean.csv' is inside the 'data' folder in your GitHub repository.")
+            return pd.DataFrame()
+
+        df = pd.read_csv(path)
         
         # Convert Timestamp to datetime
         if 'Timestamp' in df.columns:
@@ -30,7 +37,7 @@ def load_data(url):
             
         return df
     except Exception as e:
-        st.error(f"Error loading data from GitHub: {e}")
+        st.error(f"Error loading data: {e}")
         return pd.DataFrame()
 
 # --- MAIN APP ---
@@ -39,30 +46,32 @@ def main():
     st.markdown("Real-time monitoring of Blower Damper, Tube Scaling, Pressure, and O2.")
 
     # Load Data
-    with st.spinner('Fetching data from GitHub...'):
-        df = load_data(GITHUB_DATA_URL)
+    with st.spinner('Loading data...'):
+        df = load_data(DATA_PATH)
 
     if df.empty:
-        st.warning("No data loaded. Please check the GitHub URL in the code.")
         return
 
-    # Sidebar Filters (Optional but useful)
+    # Sidebar Filters
     st.sidebar.header("Filter Options")
     
-    # Date Range Filter logic (if data spans multiple days)
-    min_date = df['Timestamp'].min().date()
-    max_date = df['Timestamp'].max().date()
-    
-    selected_date = st.sidebar.date_input(
-        "Select Date",
-        value=min_date,
-        min_value=min_date,
-        max_value=max_date
-    )
-    
-    # Filter DataFrame based on selection
-    mask = (df['Timestamp'].dt.date == selected_date)
-    df_filtered = df.loc[mask]
+    # Date Range Filter
+    if 'Timestamp' in df.columns:
+        min_date = df['Timestamp'].min().date()
+        max_date = df['Timestamp'].max().date()
+        
+        selected_date = st.sidebar.date_input(
+            "Select Date",
+            value=min_date,
+            min_value=min_date,
+            max_value=max_date
+        )
+        
+        # Filter DataFrame
+        mask = (df['Timestamp'].dt.date == selected_date)
+        df_filtered = df.loc[mask]
+    else:
+        df_filtered = df
 
     if df_filtered.empty:
         st.info("No data available for the selected date.")
@@ -143,7 +152,7 @@ def main():
     fig.update_yaxes(title_text="Bar", row=3, col=1)
     fig.update_yaxes(title_text="O2 %", row=4, col=1)
 
-    # X-Axis Formatting (HH:MM)
+    # X-Axis Formatting
     fig.update_xaxes(
         tickformat="%H:%M",
         title_text="Time (HH:MM)",
